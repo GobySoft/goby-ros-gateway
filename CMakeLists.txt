@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(ros2_goby3_gateway)
+project(goby_ros_gateway)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -12,12 +12,12 @@ find_package(std_msgs REQUIRED)
 find_package(GOBY 3.0 REQUIRED zeromq)
 include_directories("${GOBY_INCLUDE_DIR}")
 
-add_executable(ros2_goby3_gateway src/ros2_goby3_gateway.cpp)
-ament_target_dependencies(ros2_goby3_gateway rclcpp std_msgs)
-target_link_libraries(ros2_goby3_gateway goby goby_zeromq goby_moos)
+add_executable(goby_ros_gateway src/goby_ros_gateway.cpp)
+ament_target_dependencies(goby_ros_gateway rclcpp std_msgs)
+target_link_libraries(goby_ros_gateway goby goby_zeromq goby_moos)
 
 install(TARGETS
-  ros2_goby3_gateway
+  goby_ros_gateway
   DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
