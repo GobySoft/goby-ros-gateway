@@ -78,15 +78,6 @@ class GobyROSGateway
     {
         launch_thread<GobyToROS>(cfg());
         launch_thread<ROSToGoby>(cfg());
-        // ros_to_goby_thread_.reset(new std::thread(
-        //     [this]()
-        //     {
-        //         for (;;)
-        //         {
-        //             auto ros_to_goby = std::make_shared<ROSToGoby>(cfg());
-        //             rclcpp::spin(ros_to_goby);
-        //         }
-        //     }));
     }
     ~GobyROSGateway() override {}
 
@@ -102,13 +93,12 @@ int main(int argc, char* argv[])
     rclcpp::init(argc, argv, init_options, rclcpp::SignalHandlerOptions::None);
 
     int argc_no_ros = args_without_ros_args.size();
-    char** argv_no_ros = new char*[argc];
+    char** argv_no_ros = new char*[argc_no_ros];
     for (int i = 0; i < argc_no_ros; ++i)
     {
-        argv_no_ros[i] = new char[args_without_ros_args[i].size() +
-                                  1]; // Allocate memory for the string + null terminator
-        std::strcpy(argv_no_ros[i],
-                    args_without_ros_args[i].c_str()); // Copy string content to char*
+        // +1 for null terminator
+        argv_no_ros[i] = new char[args_without_ros_args[i].size() + 1];
+        std::strcpy(argv_no_ros[i], args_without_ros_args[i].c_str());
     }
 
     goby::run<GobyROSGateway>(argc_no_ros, argv_no_ros);
