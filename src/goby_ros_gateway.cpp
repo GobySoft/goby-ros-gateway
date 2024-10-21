@@ -1,89 +1,51 @@
-#include <chrono>
-#include <functional>
-#include <memory>
-#include <string>
+#include "goby_ros_gateway/goby_ros_gateway.h"
 
-#include "rclcpp/rclcpp.hpp"
-#include "std_msgs/msg/string.hpp"
+using goby::glog;
 
-#include <goby/middleware/marshalling/json.h>
-
-#include "goby/zeromq/application/multi_thread.h"
-#include <goby/moos/protobuf/moos_gateway_config.pb.h>
-
-namespace groups
+namespace goby
 {
-constexpr goby::middleware::Group nav_to_ros{"nav_to_ros"};
-constexpr goby::middleware::Group nav_from_ros{"nav_from_ros"};
-} // namespace groups
+namespace apps
+{
 
-class GobyToROS
-    : public goby::middleware::SimpleThread<goby::apps::moos::protobuf::GobyMOOSGatewayConfig>,
-      public rclcpp::Node
+namespace ros
+{
+
+class Gateway
+    : public goby::zeromq::MultiThreadApplication<goby::apps::ros::protobuf::GatewayConfig>
 {
   public:
-    GobyToROS(const goby::apps::moos::protobuf::GobyMOOSGatewayConfig& cfg)
-        : goby::middleware::SimpleThread<goby::apps::moos::protobuf::GobyMOOSGatewayConfig>(cfg),
-          Node("goby_to_ros")
+    Gateway()
     {
-        publisher_ = this->create_publisher<std_msgs::msg::String>("nav_from_goby", 10);
-
-        interprocess().subscribe_type_regex<groups::nav_to_ros, nlohmann::json>(
-            [this](std::shared_ptr<const nlohmann::json> json, const std::string& type)
-            {
-                std::cout << "Rx: " << json->dump() << std::endl;
-
-                auto message = std_msgs::msg::String();
-                message.data = json->dump();
-                RCLCPP_INFO(this->get_logger(), "Publishing: '%s'", message.data.c_str());
-                publisher_->publish(message);
-            });
+        for (void* handle : dl_handles_)
+        {
+            using plugin_load_func = void (*)(
+                goby::zeromq::MultiThreadApplication<goby::apps::ros::protobuf::GatewayConfig>*);
+            auto load_ptr = (plugin_load_func)dlsym(handle, "goby_ros_gateway_load");
+            (*load_ptr)(this);
+        }
     }
-
-  private:
-    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr publisher_;
-};
-
-class ROSToGoby
-    : public rclcpp::Node,
-      public goby::middleware::SimpleThread<goby::apps::moos::protobuf::GobyMOOSGatewayConfig>
-{
-  public:
-    ROSToGoby(const goby::apps::moos::protobuf::GobyMOOSGatewayConfig& cfg)
-        : Node("ros_to_goby"),
-          goby::middleware::SimpleThread<goby::apps::moos::protobuf::GobyMOOSGatewayConfig>(
-              cfg, this->loop_max_frequency())
+    ~Gateway() override
     {
-        subscriber_ = this->create_subscription<std_msgs::msg::String>(
-            "nav_to_goby", 1,
-            [this](const std_msgs::msg::String::ConstSharedPtr msg)
-            {
-                std::cout << "nav to goby: " << msg->data << std::endl;
-                nlohmann::json j = nlohmann::json::parse(msg->data);
-                interprocess().publish<groups::nav_from_ros>(j);
-            });
+        for (void* handle : dl_handles_)
+        {
+            using plugin_unload_func = void (*)(
+                goby::zeromq::MultiThreadApplication<goby::apps::ros::protobuf::GatewayConfig>*);
+            auto unload_ptr = (plugin_unload_func)dlsym(handle, "goby_ros_gateway_unload");
+
+            if (unload_ptr)
+                (*unload_ptr)(this);
+        }
     }
-
-    void loop() override { rclcpp::spin(this->shared_from_this()); }
-
-  private:
-    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr subscriber_;
-};
-
-class GobyROSGateway
-    : public goby::zeromq::MultiThreadApplication<goby::apps::moos::protobuf::GobyMOOSGatewayConfig>
-{
-  public:
-    GobyROSGateway()
-    {
-        launch_thread<GobyToROS>(cfg());
-        launch_thread<ROSToGoby>(cfg());
-    }
-    ~GobyROSGateway() override {}
+    static std::vector<void*> dl_handles_;
 
   private:
     std::unique_ptr<std::thread> ros_to_goby_thread_;
 };
+} // namespace ros
+} // namespace apps
+} // namespace goby
+
+std::vector<void*> goby::apps::ros::Gateway::dl_handles_;
 
 int main(int argc, char* argv[])
 {
@@ -101,12 +63,50 @@ int main(int argc, char* argv[])
         std::strcpy(argv_no_ros[i], args_without_ros_args[i].c_str());
     }
 
-    goby::run<GobyROSGateway>(argc_no_ros, argv_no_ros);
+    // load plugins from environmental variable
+    char* plugins = getenv("GOBY_ROS_GATEWAY_PLUGINS");
+    if (plugins)
+    {
+        std::string s_plugins(plugins);
+        std::vector<std::string> plugin_vec;
+        boost::split(plugin_vec, s_plugins, boost::is_any_of(";:,"));
+
+        for (const auto& plugin : plugin_vec)
+        {
+            glog.is_verbose() && glog << "Loading plugin library: " << plugin << std::endl;
+            void* handle = dlopen(plugin.c_str(), RTLD_LAZY);
+            if (handle)
+            {
+                goby::apps::ros::Gateway::dl_handles_.push_back(handle);
+            }
+            else
+            {
+                std::cerr << "Failed to open library: " << plugin << ", reason: " << dlerror()
+                          << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            if (!dlsym(handle, "goby_ros_gateway_load"))
+            {
+                std::cerr << "Function goby_ros_gateway_load in library: " << plugin
+                          << " does not exist." << std::endl;
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
+    else
+    {
+        std::cerr << "Must define at least one plugin library in "
+                     "GOBY_ROS_GATEWAY_PLUGINS environmental variable"
+                  << std::endl;
+        exit(EXIT_FAILURE);
+    }
+
+    int retval = goby::run<goby::apps::ros::Gateway>(argc_no_ros, argv_no_ros);
 
     for (int i = 0; i < argc_no_ros; ++i) { delete[] argv_no_ros[i]; }
     delete[] argv_no_ros;
 
     rclcpp::shutdown();
 
-    return 0;
+    return retval;
 }

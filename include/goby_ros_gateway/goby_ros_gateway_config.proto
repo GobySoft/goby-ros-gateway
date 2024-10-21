@@ -1,0 +1,22 @@
+syntax = "proto2";
+import "goby/middleware/protobuf/app_config.proto";
+import "goby/zeromq/protobuf/interprocess_config.proto";
+import "goby/protobuf/option_extensions.proto";
+
+package goby.apps.ros.protobuf;
+
+message GatewayConfig
+{
+    optional goby.middleware.protobuf.AppConfig app = 1;
+    optional goby.zeromq.protobuf.InterProcessPortalConfig interprocess = 2
+        [(goby.field) = { cfg { env: "GOBY_INTERPROCESS" } }];
+
+    message NodePrefix
+    {
+        optional string to_ros = 1 [default = "goby_to_ros"];
+        optional string to_goby = 2 [default = "ros_to_goby"];
+    }
+    optional NodePrefix node_prefix = 3;
+
+    extensions 1000 to max;
+}
