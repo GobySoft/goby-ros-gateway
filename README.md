@@ -2,7 +2,7 @@
 
 The `goby_ros_gateway` application is used to pass messages between the Goby3 and ROS 2 middlewares using a flexible plugin architecture.
 
-The `goby_ros_gateway` itself is very lightweight and provides a library (`libgoby_ros_gateway.so`) that supports creation of threads that do that the actual subscriptions, message translation, and publication of data. This makes the tool completely generalizable, regardless of the marshalling scheme (e.g., Protobuf) used in Goby3, and the types of ROSMsgs and topsics that need to be published or subscribed in ROS.
+The `goby_ros_gateway` itself is very lightweight and provides a library (`libgoby_ros_gateway.so`) that supports creation of threads that do that the actual subscriptions, message translation, and publication of data. This makes the tool completely generalizable, regardless of the marshalling scheme (e.g., Protobuf) used in Goby3, and the types of ROSMsgs and topics that need to be published or subscribed in ROS.
 
 Goby3 at this time only supports Linux and C++ so this package is equally limited.
 

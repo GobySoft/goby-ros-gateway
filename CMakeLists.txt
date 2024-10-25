@@ -21,7 +21,7 @@ configure_file(include/goby_ros_gateway/goby_ros_gateway.h ${CMAKE_CURRENT_BINAR
 add_executable(goby_ros_gateway_app src/goby_ros_gateway.cpp)
 set_target_properties(goby_ros_gateway_app PROPERTIES OUTPUT_NAME goby_ros_gateway)
 ament_target_dependencies(goby_ros_gateway_app rclcpp)
-target_link_libraries(goby_ros_gateway_app goby goby_zeromq protobuf::libprotobuf  goby_ros_gateway)
+target_link_libraries(goby_ros_gateway_app goby goby_zeromq protobuf::libprotobuf goby_ros_gateway)
 target_include_directories(goby_ros_gateway_app
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
